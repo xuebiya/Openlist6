@@ -15,6 +15,7 @@ type Addition struct {
 	PageSize       int64   `json:"page_size" type:"number" default:"200" help:"list api per page size of 115open driver"`
 	AccessToken    string  `json:"access_token" required:"true"`
 	RefreshToken   string  `json:"refresh_token" required:"true"`
+	Internal       bool    `json:"internal" type:"bool" default:"false" help:"use aliyun internal network to upload, must run on aliyun server"`
 }
 
 var config = driver.Config{

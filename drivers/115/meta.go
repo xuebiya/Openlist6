@@ -11,6 +11,7 @@ type Addition struct {
 	QRCodeSource string  `json:"qrcode_source" type:"select" options:"web,android,ios,tv,alipaymini,wechatmini,qandroid" default:"linux" help:"select the QR code device, default linux"`
 	PageSize     int64   `json:"page_size" type:"number" default:"1000" help:"list api per page size of 115 driver"`
 	LimitRate    float64 `json:"limit_rate" type:"float" default:"2" help:"limit all api request rate ([limit]r/1s)"`
+	Internal     bool    `json:"internal" type:"bool" default:"false" help:"use aliyun internal network to upload, must run on aliyun server"`
 	driver.RootID
 }
 

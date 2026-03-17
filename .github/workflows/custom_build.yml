@@ -31,10 +31,8 @@ jobs:
           go-version: "1.25.0"
 
       - name: Setup web
-        run: bash build.sh dev web
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          FRONTEND_REPO: ${{ vars.FRONTEND_REPO }}
+        run: echo "Using local frontend files from public/dist"
+        # Skip web setup - using local frontend files via SKIP_WEB env var
 
       - name: Build
         uses: OpenListTeam/cgo-actions@v1.2.2

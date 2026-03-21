@@ -37,7 +37,6 @@ func (d *Pan115) login() error {
 		driver115.UA(d.getUA()),
 		func(c *driver115.Pan115Client) {
 			c.Client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: conf.Conf.TlsInsecureSkipVerify})
-			c.UseInternalUpload = d.Internal
 		},
 	}
 	d.client = driver115.New(opts...)
@@ -67,14 +66,86 @@ func (d *Pan115) getFiles(fileId string) ([]FileObj, error) {
 	if d.PageSize <= 0 {
 		d.PageSize = driver115.FileListLimit
 	}
-	files, err := d.client.ListWithLimit(fileId, d.PageSize, driver115.WithMultiUrls())
-	if err != nil {
+	limit := d.PageSize
+	if limit > driver115.MaxDirPageLimit {
+		limit = driver115.MaxDirPageLimit
+	}
+
+	opts := driver115.DefaultListOptions()
+	driver115.WithMultiUrls()(opts)
+	if len(opts.ApiURLs) == 0 {
+		opts.ApiURLs = []string{driver115.ApiFileList}
+	}
+
+	offset := int64(0)
+	for i := 0; ; i++ {
+		result, err := d.getFilesPage(fileId, opts.ApiURLs[i%len(opts.ApiURLs)], limit, offset)
+		if err != nil {
+			return nil, err
+		}
+		for _, fileInfo := range result.Files {
+			res = append(res, fileObjFromInfo(&fileInfo))
+		}
+		offset = int64(result.Offset) + limit
+		if offset >= int64(result.Count) {
+			break
+		}
+	}
+
+	return res, nil
+}
+
+func fileObjFromInfo(fileInfo *fileInfoWithThumb) FileObj {
+	file := &driver115.File{}
+	file.From(&fileInfo.FileInfo)
+	file.ThumbURL = fileInfo.ThumbURL
+	return FileObj{
+		File: *file,
+	}
+}
+
+type fileInfoWithThumb struct {
+	driver115.FileInfo
+	ThumbURL string `json:"u"`
+}
+
+type fileListRespWithThumb struct {
+	driver115.BasicResp
+	CategoryID driver115.IntString `json:"cid"`
+	Count      int                 `json:"count"`
+	Offset     int                 `json:"offset"`
+	Files      []fileInfoWithThumb `json:"data"`
+}
+
+func (d *Pan115) getFilesPage(dirID, apiURL string, limit, offset int64) (*fileListRespWithThumb, error) {
+	if dirID == "" {
+		dirID = "0"
+	}
+	result := fileListRespWithThumb{}
+	params := map[string]string{
+		"aid":              "1",
+		"cid":              dirID,
+		"offset":           strconv.FormatInt(offset, 10),
+		"show_dir":         "1",
+		"limit":            strconv.FormatInt(limit, 10),
+		"snap":             "0",
+		"natsort":          "0",
+		"record_open_time": "1",
+		"format":           "json",
+		"fc_mix":           "0",
+	}
+	req := d.client.NewRequest().
+		ForceContentType("application/json;charset=UTF-8").
+		SetQueryParams(params).
+		SetResult(&result)
+	resp, err := req.Get(apiURL)
+	if err := driver115.CheckErr(err, &result, resp); err != nil {
 		return nil, err
 	}
-	for _, file := range *files {
-		res = append(res, FileObj{file})
+	if dirID != string(result.CategoryID) {
+		return nil, errors.New("unexpected response")
 	}
-	return res, nil
+	return &result, nil
 }
 
 func (d *Pan115) getNewFile(fileId string) (*FileObj, error) {

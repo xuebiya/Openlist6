@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"io"
-	"strings"
 	"time"
 
 	sdk "github.com/OpenListTeam/115-sdk-go"
@@ -36,22 +35,8 @@ func calPartSize(fileSize int64) int64 {
 	return partSize
 }
 
-// getInternalEndpoint converts oss endpoint to internal endpoint
-// e.g., oss-cn-beijing.aliyuncs.com -> oss-cn-beijing-internal.aliyuncs.com
-func (d *Open115) getInternalEndpoint(endpoint string) string {
-	if !d.Internal {
-		return endpoint
-	}
-	i := strings.Index(endpoint, ".aliyuncs.com")
-	if i > -1 {
-		return endpoint[:i] + "-internal" + endpoint[i:]
-	}
-	return endpoint
-}
-
 func (d *Open115) singleUpload(ctx context.Context, tempF model.File, tokenResp *sdk.UploadGetTokenResp, initResp *sdk.UploadInitResp) error {
-	endpoint := d.getInternalEndpoint(tokenResp.Endpoint)
-	ossClient, err := oss.New(endpoint, tokenResp.AccessKeyId, tokenResp.AccessKeySecret, oss.SecurityToken(tokenResp.SecurityToken))
+	ossClient, err := oss.New(tokenResp.Endpoint, tokenResp.AccessKeyId, tokenResp.AccessKeySecret, oss.SecurityToken(tokenResp.SecurityToken))
 	if err != nil {
 		return err
 	}
@@ -85,8 +70,7 @@ func (d *Open115) singleUpload(ctx context.Context, tempF model.File, tokenResp 
 // }
 
 func (d *Open115) multpartUpload(ctx context.Context, stream model.FileStreamer, up driver.UpdateProgress, tokenResp *sdk.UploadGetTokenResp, initResp *sdk.UploadInitResp) error {
-	endpoint := d.getInternalEndpoint(tokenResp.Endpoint)
-	ossClient, err := oss.New(endpoint, tokenResp.AccessKeyId, tokenResp.AccessKeySecret, oss.SecurityToken(tokenResp.SecurityToken))
+	ossClient, err := oss.New(tokenResp.Endpoint, tokenResp.AccessKeyId, tokenResp.AccessKeySecret, oss.SecurityToken(tokenResp.SecurityToken))
 	if err != nil {
 		return err
 	}

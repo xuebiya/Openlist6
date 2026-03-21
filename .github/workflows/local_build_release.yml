@@ -1,0 +1,49 @@
+name: Build and Release with Local Frontend
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_title:
+        description: 'Release Title'
+        required: true
+        default: 'Build Release'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.0'
+
+      - name: Install dependencies
+        run: |
+          sudo snap install zig --classic --beta
+          docker pull crazymax/xgo:latest
+          go install github.com/crazy-max/xgo@latest
+          sudo apt install upx
+
+      - name: Build with local frontend
+        run: |
+          export SKIP_WEB=true
+          bash build.sh release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FRONTEND_REPO: OpenListTeam/OpenList-Frontend
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: |
+            ## OpenList Release
+
+            Built with local frontend files.
+          files: build/compress/*
+          tag_name: build-$(date +'%Y%m%d-%H%M%S')
+          generate_release_notes: true

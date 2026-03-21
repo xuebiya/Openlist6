@@ -58,9 +58,12 @@ func (d *Pan115) List(ctx context.Context, dir model.Obj, args model.ListArgs) (
 	if err != nil && !errors.Is(err, driver115.ErrNotExist) {
 		return nil, err
 	}
-	return utils.SliceConvert(files, func(src FileObj) (model.Obj, error) {
-		return &src, nil
+	objs := utils.MustSliceConvert(files, func(src FileObj) model.Obj {
+		return &src
 	})
+	// 默认按文件名升序排序
+	model.SortFiles(objs, "name", "asc")
+	return objs, nil
 }
 
 func (d *Pan115) Link(ctx context.Context, file model.Obj, args model.LinkArgs) (*model.Link, error) {

@@ -9,6 +9,8 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
+    env:
+      SKIP_WEB: "true"
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -20,18 +22,29 @@ jobs:
         with:
           go-version: '1.23'
 
+      - name: Verify local frontend exists
+        run: |
+          if (Test-Path "public/dist/index.html") {
+            Write-Host "Local frontend files found in public/dist"
+            Get-Content "public/dist/index.html" | Select-Object -First 5
+          } else {
+            Write-Host "ERROR: public/dist/index.html not found!"
+            exit 1
+          }
+
       - name: Get dependencies
         run: go mod download
 
       - name: Build Windows exe
         env:
-          SKIP_WEB: "true"
           GOOS: windows
           GOARCH: amd64
           CGO_ENABLED: 1
         run: |
           $version = if ($env:GITHUB_REF -match 'v[\d]+\.[\d]+\.[\d]+') { $matches[0] } else { "v0.0.0" }
           $ldflags = "-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=$version' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'"
+          Write-Host "Building with version: $version"
+          Write-Host "Using local frontend files (SKIP_WEB=$env:SKIP_WEB)"
           go build -o openlist-amd64.exe -ldflags=$ldflags -tags=jsoniter .
 
       - name: Upload Windows artifact
@@ -43,6 +56,8 @@ jobs:
 
   build-linux:
     runs-on: ubuntu-latest
+    env:
+      SKIP_WEB: "true"
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -54,6 +69,16 @@ jobs:
         with:
           go-version: '1.23'
 
+      - name: Verify local frontend exists
+        run: |
+          if [ -f "public/dist/index.html" ]; then
+            echo "Local frontend files found in public/dist"
+            head -5 public/dist/index.html
+          else
+            echo "ERROR: public/dist/index.html not found!"
+            exit 1
+          fi
+
       - name: Get dependencies
         run: go mod download
 
@@ -64,7 +89,6 @@ jobs:
 
       - name: Build Linux amd64
         env:
-          SKIP_WEB: "true"
           GOOS: linux
           GOARCH: amd64
           CGO_ENABLED: 1
@@ -74,6 +98,8 @@ jobs:
           if ! [[ $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
             VERSION="v0.0.0"
           fi
+          echo "Building with version: $VERSION"
+          echo "Using local frontend files (SKIP_WEB=$SKIP_WEB)"
           ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'"
           go build -o openlist-amd64 -ldflags="$ldflags" -tags=jsoniter .
 

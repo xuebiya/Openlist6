@@ -1,61 +1,137 @@
-name: Test Build
+name: Build Release
 
 on:
-  pull_request:
-    branches: ["main", "master"]
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+env:
+  # 使用本地前端，不从官方仓库拉取
+  SKIP_WEB_DOWNLOAD: "true"
+  FRONTEND_REPO: ""
 
 jobs:
-  build:
+  build-windows:
+    runs-on: windows-latest
     strategy:
       matrix:
-        target:
-          - darwin-amd64
-          - darwin-arm64
-          - windows-amd64
-          - linux-arm64-musl
-          - linux-amd64-musl
-          - windows-arm64
-          - android-arm64
-    name: Build ${{ matrix.target }}
-    runs-on: ubuntu-latest
+        go-version: ['1.23']
+
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - uses: benjlevesque/short-sha@v3.0
-        id: short-sha
-
-      - name: Setup Go
+      - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.25.0"
+          go-version: ${{ matrix.go-version }}
 
-      - name: Setup web
-        run: echo "Using local frontend files from public/dist"
-        # Skip web setup - using local frontend files via SKIP_WEB env var
+      - name: Get dependencies
+        run: |
+          go mod download
 
-      - name: Build
-        uses: OpenListTeam/cgo-actions@v1.2.2
-        with:
-          targets: ${{ matrix.target }}
-          musl-target-format: $os-$musl-$arch
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          out-dir: build
-          x-flags: |
-            github.com/OpenListTeam/OpenList/v4/internal/conf.BuiltAt=$built_at
-            github.com/OpenListTeam/OpenList/v4/internal/conf.GitAuthor=The OpenList Projects Contributors <noreply@openlist.team>
-            github.com/OpenListTeam/OpenList/v4/internal/conf.GitCommit=$git_commit
-            github.com/OpenListTeam/OpenList/v4/internal/conf.Version=$tag
-            github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=rolling
-          output: openlist$ext
+      - name: Build Windows exe
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: 1
+        run: |
+          $version = if ($env:GITHUB_REF -match 'v[\d]+\.[\d]+\.[\d]+') { $matches[0] } else { "v0.0.0" }
+          $ldflags = "-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=$version' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'"
+          go build -o openlist-amd64.exe -ldflags=$ldflags -tags=jsoniter .
 
-      - name: Upload artifact
+      - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: openlist_${{ steps.short-sha.outputs.sha }}_${{ matrix.target }}
-          path: build/*
+          name: openlist-windows-amd64
+          path: openlist-amd64.exe
+          retention-days: 5
+
+  build-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.23']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Get dependencies
+        run: |
+          go mod download
+
+      - name: Install musl-cross
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools gcc-aarch64-linux-gnu
+
+      - name: Build Linux amd64
+        env:
+          GOOS: linux
+          GOARCH: amd64
+          CGO_ENABLED: 1
+          CC: musl-gcc
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          if ! [[ $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            VERSION="v0.0.0"
+          fi
+          WEB_VERSION="local"
+          ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=${WEB_VERSION}'"
+          go build -o openlist-amd64 -ldflags="$ldflags" -tags=jsoniter .
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openlist-linux-amd64
+          path: openlist-amd64
+          retention-days: 5
+
+  release:
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: openlist-windows-amd64
+          path: artifacts
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: openlist-linux-amd64
+          path: artifacts
+
+      - name: Create zip for Windows
+        run: |
+          cd artifacts
+          cp openlist-windows-amd64 openlist.exe
+          powershell Compress-Archive -Path openlist.exe -DestinationPath openlist-windows-amd64.zip -Force
+
+      - name: Create tar.gz for Linux
+        run: |
+          cd artifacts
+          tar -czvf openlist-linux-amd64.tar.gz openlist-linux-amd64
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/openlist-windows-amd64.zip
+            artifacts/openlist-linux-amd64.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -6,18 +6,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
-env:
-  # 使用本地前端，不从官方仓库拉取
-  SKIP_WEB_DOWNLOAD: "true"
-  FRONTEND_REPO: ""
-
 jobs:
   build-windows:
     runs-on: windows-latest
-    strategy:
-      matrix:
-        go-version: ['1.23']
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -27,14 +18,14 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
+          go-version: '1.23'
 
       - name: Get dependencies
-        run: |
-          go mod download
+        run: go mod download
 
       - name: Build Windows exe
         env:
+          SKIP_WEB: "true"
           GOOS: windows
           GOARCH: amd64
           CGO_ENABLED: 1
@@ -52,10 +43,6 @@ jobs:
 
   build-linux:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go-version: ['1.23']
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -65,19 +52,19 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
+          go-version: '1.23'
 
       - name: Get dependencies
-        run: |
-          go mod download
+        run: go mod download
 
       - name: Install musl-cross
         run: |
           sudo apt-get update
-          sudo apt-get install -y musl-tools gcc-aarch64-linux-gnu
+          sudo apt-get install -y musl-tools
 
       - name: Build Linux amd64
         env:
+          SKIP_WEB: "true"
           GOOS: linux
           GOARCH: amd64
           CGO_ENABLED: 1
@@ -87,8 +74,7 @@ jobs:
           if ! [[ $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
             VERSION="v0.0.0"
           fi
-          WEB_VERSION="local"
-          ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=${WEB_VERSION}'"
+          ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'"
           go build -o openlist-amd64 -ldflags="$ldflags" -tags=jsoniter .
 
       - name: Upload Linux artifact
@@ -120,12 +106,12 @@ jobs:
         run: |
           cd artifacts
           cp openlist-windows-amd64 openlist.exe
-          powershell Compress-Archive -Path openlist.exe -DestinationPath openlist-windows-amd64.zip -Force
+          zip openlist-windows-amd64.zip openlist.exe
 
       - name: Create tar.gz for Linux
         run: |
           cd artifacts
-          tar -czvf openlist-linux-amd64.tar.gz openlist-linux-amd64
+          tar -czvf openlist-linux-amd64.tar.gz openlist-amd64
 
       - name: Create Release
         uses: softprops/action-gh-release@v1

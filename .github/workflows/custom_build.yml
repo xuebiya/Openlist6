@@ -21,6 +21,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: benjlevesque/short-sha@v3.0
         id: short-sha
@@ -30,11 +32,14 @@ jobs:
         with:
           go-version: "1.25.0"
 
-      - name: Setup web
-        run: bash build.sh dev web
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          FRONTEND_REPO: ${{ vars.FRONTEND_REPO }}
+      - name: Verify local frontend files
+        run: |
+          if [ -f "public/dist/index.html" ]; then
+            echo "Using local frontend files from public/dist"
+          else
+            echo "ERROR: public/dist/index.html not found!"
+            exit 1
+          fi
 
       - name: Build
         uses: OpenListTeam/cgo-actions@v1.2.2
@@ -48,7 +53,7 @@ jobs:
             github.com/OpenListTeam/OpenList/v4/internal/conf.GitAuthor=xuebiya
             github.com/OpenListTeam/OpenList/v4/internal/conf.GitCommit=$git_commit
             github.com/OpenListTeam/OpenList/v4/internal/conf.Version=$tag
-            github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=rolling
+            github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local
           output: openlist$ext
 
       - name: Upload artifact
@@ -96,10 +101,9 @@ jobs:
           tag_name: build-${{ steps.date.outputs.date }}
           name: Build ${{ steps.date.outputs.date }}
           body: |
-            自动构建版本 - 包含媒体访问日志功能
+            自动构建版本 - 使用本地前端文件
             
-            当访问图片或视频文件时，会输出以下格式的日志：
-            时间：2026年1月16日 01:38:39 访问IP：x.x.x.x 用户：xxx 访问路径：/xxx
+            本构建使用仓库中的 public/dist 目录中的前端文件，不从网络拉取。
           files: release/*
           draft: false
           prerelease: false

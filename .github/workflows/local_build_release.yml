@@ -29,13 +29,21 @@ jobs:
           go install github.com/crazy-max/xgo@latest
           sudo apt install upx
 
+      - name: Verify local frontend files
+        run: |
+          if [ -f "public/dist/index.html" ]; then
+            echo "Using local frontend files from public/dist"
+          else
+            echo "ERROR: public/dist/index.html not found!"
+            exit 1
+          fi
+
       - name: Build with local frontend
         run: |
           export SKIP_WEB=true
           bash build.sh release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          FRONTEND_REPO: OpenListTeam/OpenList-Frontend
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -43,7 +51,7 @@ jobs:
           body: |
             ## OpenList Release
 
-            Built with local frontend files.
+            Built with local frontend files from public/dist.
           files: build/compress/*
           tag_name: build-$(date +'%Y%m%d-%H%M%S')
           generate_release_notes: true

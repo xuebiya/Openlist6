@@ -54,6 +54,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Verify local frontend files
+        run: |
+          if [ -f "public/dist/index.html" ]; then
+            echo "Using local frontend files from public/dist"
+          else
+            echo "ERROR: public/dist/index.html not found!"
+            exit 1
+          fi
+
       - name: Install dependencies
         if: matrix.target-platform == ''
         run: |
@@ -64,10 +73,10 @@ jobs:
 
       - name: Build
         run: |
+          export SKIP_WEB=true
           bash build.sh release ${{ matrix.build-type == 'lite' && 'lite' || '' }} ${{ matrix.target-platform }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          FRONTEND_REPO: ${{ vars.FRONTEND_REPO }}
 
       - name: Upload assets
         uses: softprops/action-gh-release@v2

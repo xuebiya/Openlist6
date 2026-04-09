@@ -38,6 +38,15 @@ jobs:
         with:
           go-version: '1.25.0'
 
+      - name: Verify local frontend files
+        run: |
+          if [ -f "public/dist/index.html" ]; then
+            echo "Using local frontend files from public/dist"
+          else
+            echo "ERROR: public/dist/index.html not found!"
+            exit 1
+          fi
+
       - name: Cache Musl
         id: cache-musl
         uses: actions/cache@v4
@@ -47,15 +56,18 @@ jobs:
 
       - name: Download Musl Library
         if: steps.cache-musl.outputs.cache-hit != 'true'
-        run: bash build.sh prepare docker-multiplatform
+        run: |
+          export SKIP_WEB=true
+          bash build.sh prepare docker-multiplatform
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build go binary (beta)
-        run: bash build.sh beta docker-multiplatform
+        run: |
+          export SKIP_WEB=true
+          bash build.sh beta docker-multiplatform
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          FRONTEND_REPO: ${{ vars.FRONTEND_REPO }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

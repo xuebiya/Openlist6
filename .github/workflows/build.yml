@@ -87,10 +87,10 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Install musl-cross
+      - name: Install musl tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y musl-tools
+          sudo apt-get install -y musl musl-tools
 
       - name: Get dependencies
         run: go mod download
@@ -102,7 +102,7 @@ jobs:
             VERSION="v0.0.0"
           fi
           echo "Building version: $VERSION"
-          go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" -tags=jsoniter -o openlist-linux-amd64 .
+          CGO_ENABLED=1 CC=musl-gcc go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" -tags=jsoniter -o openlist-linux-amd64 .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -119,12 +119,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Setup QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          image: multiarch/qemu-user-static:latest
-          platforms: arm64
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -146,7 +140,7 @@ jobs:
             VERSION="v0.0.0"
           fi
           echo "Building version: $VERSION"
-          go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" -tags=jsoniter -o openlist-linux-arm64 .
+          CGO_ENABLED=1 CC=aarch64-linux-gnu-gcc go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" -tags=jsoniter -o openlist-linux-arm64 .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -179,7 +173,7 @@ jobs:
             VERSION="v0.0.0"
           fi
           echo "Building version: $VERSION"
-          go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" -tags=jsoniter -o openlist-linux-386 .
+          CGO_ENABLED=1 CC=gcc go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" -tags=jsoniter -o openlist-linux-386 .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -212,7 +206,7 @@ jobs:
             VERSION="v0.0.0"
           fi
           echo "Building version: $VERSION"
-          go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" -tags=jsoniter -o openlist-darwin-amd64 .
+          CGO_ENABLED=1 go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" -tags=jsoniter -o openlist-darwin-amd64 .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -245,7 +239,7 @@ jobs:
             VERSION="v0.0.0"
           fi
           echo "Building version: $VERSION"
-          go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" -tags=jsoniter -o openlist-darwin-arm64 .
+          CGO_ENABLED=1 go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" -tags=jsoniter -o openlist-darwin-arm64 .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -256,17 +250,24 @@ jobs:
 
   # 构建 Android amd64
   build-android-amd64:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget unzip
+
       - name: Setup Android NDK
-        uses: android/actions-setup-java@v2
-        with:
-          ndk-version: r26b
+        run: |
+          cd /tmp
+          wget -q https://dl.google.com/android/repository/android-ndk-r26b-linux.zip -O android-ndk.zip
+          unzip -q android-ndk.zip
+          echo "ANDROID_NDK=/tmp/android-ndk-r26b" >> $GITHUB_ENV
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -283,10 +284,15 @@ jobs:
             VERSION="v0.0.0"
           fi
           echo "Building version: $VERSION"
-          CGO_CFLAGS="--target=x86_64-linux-android24 --sysroot=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot" \
-          CGO_CXXFLAGS="--target=x86_64-linux-android24 --sysroot=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot" \
-          go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" \
-            -tags=jsoniter -o openlist-android-amd64 .
+          export ANDROID_NDK=/tmp/android-ndk-r26b
+          export PATH="$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+          export CC=x86_64-linux-android24-clang
+          export CXX=x86_64-linux-android24-clang++
+          export CGO_ENABLED=1
+          export CGO_CFLAGS="--target=x86_64-linux-android24 --sysroot=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          export CGO_CXXFLAGS="--target=x86_64-linux-android24 --sysroot=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          export CGO_LDFLAGS="-target x86_64-linux-android24"
+          go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" -tags=jsoniter -o openlist-android-amd64 .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -297,17 +303,24 @@ jobs:
 
   # 构建 Android arm64
   build-android-arm64:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget unzip
+
       - name: Setup Android NDK
-        uses: android/actions-setup-java@v2
-        with:
-          ndk-version: r26b
+        run: |
+          cd /tmp
+          wget -q https://dl.google.com/android/repository/android-ndk-r26b-linux.zip -O android-ndk.zip
+          unzip -q android-ndk.zip
+          echo "ANDROID_NDK=/tmp/android-ndk-r26b" >> $GITHUB_ENV
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -324,10 +337,15 @@ jobs:
             VERSION="v0.0.0"
           fi
           echo "Building version: $VERSION"
-          CGO_CFLAGS="--target=aarch64-linux-android24 --sysroot=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot" \
-          CGO_CXXFLAGS="--target=aarch64-linux-android24 --sysroot=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot" \
-          go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" \
-            -tags=jsoniter -o openlist-android-arm64 .
+          export ANDROID_NDK=/tmp/android-ndk-r26b
+          export PATH="$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+          export CC=aarch64-linux-android24-clang
+          export CXX=aarch64-linux-android24-clang++
+          export CGO_ENABLED=1
+          export CGO_CFLAGS="--target=aarch64-linux-android24 --sysroot=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          export CGO_CXXFLAGS="--target=aarch64-linux-android24 --sysroot=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          export CGO_LDFLAGS="-target aarch64-linux-android24"
+          go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" -tags=jsoniter -o openlist-android-arm64 .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

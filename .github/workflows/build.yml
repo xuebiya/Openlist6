@@ -5,67 +5,22 @@ on:
     tags:
       - 'v*'
     branches:
+      - master
       - main
   workflow_dispatch:
 
 env:
-  NODE_VERSION: '20'
   GO_VERSION: '1.23'
-  FRONTEND_DIR: frontend
 
 jobs:
-  # 构建前端
-  build-frontend:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'pnpm'
-          cache-dependency-path: ${{ env.FRONTEND_DIR }}/pnpm-lock.yaml
-
-      - name: Install pnpm
-        run: npm install -g pnpm
-
-      - name: Install frontend dependencies
-        working-directory: ${{ env.FRONTEND_DIR }}
-        run: pnpm install
-
-      - name: Build frontend
-        working-directory: ${{ env.FRONTEND_DIR }}
-        run: pnpm run build
-
-      - name: Copy frontend to backend
-        run: |
-          rm -rf public/dist
-          cp -r ${{ env.FRONTEND_DIR }}/dist public/
-
-      - name: Upload frontend artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-dist
-          path: public/dist
-          retention-days: 1
-
   # 构建 Windows amd64
   build-windows-amd64:
-    needs: build-frontend
     runs-on: windows-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Download frontend
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: public/dist
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -94,19 +49,12 @@ jobs:
 
   # 构建 Linux amd64 (静态编译)
   build-linux-amd64:
-    needs: build-frontend
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Download frontend
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: public/dist
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -142,21 +90,14 @@ jobs:
           path: openlist-linux-amd64
           retention-days: 1
 
-  # 构建 Linux arm64 (musl)
+  # 构建 Linux arm64
   build-linux-arm64:
-    needs: build-frontend
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Download frontend
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: public/dist
 
       - name: Setup QEMU
         uses: docker/setup-qemu-action@v3
@@ -198,21 +139,52 @@ jobs:
           path: openlist-linux-arm64
           retention-days: 1
 
-  # 构建 macOS amd64
-  build-darwin-amd64:
-    needs: build-frontend
-    runs-on: macos-latest
+  # 构建 Linux 386
+  build-linux-386:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Download frontend
-        uses: actions/download-artifact@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          name: frontend-dist
-          path: public/dist
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Get dependencies
+        run: go mod download
+
+      - name: Build Linux 386
+        env:
+          GOOS: linux
+          GOARCH: 386
+          CGO_ENABLED: 1
+          CC: gcc
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          if ! [[ $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            VERSION="v0.0.0"
+          fi
+          ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'"
+          go build -o openlist-linux-386 -ldflags="$ldflags" -tags=jsoniter .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openlist-linux-386
+          path: openlist-linux-386
+          retention-days: 1
+
+  # 构建 macOS amd64
+  build-darwin-amd64:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -244,19 +216,12 @@ jobs:
 
   # 构建 macOS arm64 (Apple Silicon)
   build-darwin-arm64:
-    needs: build-frontend
     runs-on: macos-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Download frontend
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: public/dist
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -288,19 +253,12 @@ jobs:
 
   # 构建 Android amd64
   build-android-amd64:
-    needs: build-frontend
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Download frontend
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: public/dist
 
       - name: Setup Android NDK
         uses: android/actions-setup-java@v2
@@ -342,19 +300,12 @@ jobs:
 
   # 构建 Android arm64
   build-android-arm64:
-    needs: build-frontend
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Download frontend
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: public/dist
 
       - name: Setup Android NDK
         uses: android/actions-setup-java@v2
@@ -394,9 +345,43 @@ jobs:
           path: openlist-android-arm64
           retention-days: 1
 
+  # 构建 Windows arm64
+  build-windows-arm64:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Get dependencies
+        run: go mod download
+
+      - name: Build Windows arm64
+        env:
+          GOOS: windows
+          GOARCH: arm64
+          CGO_ENABLED: 1
+        run: |
+          $version = if ($env:GITHUB_REF -match 'v[\d]+\.[\d]+\.[\d]+') { $matches[0] } else { "v0.0.0" }
+          $ldflags = "-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=$version' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'"
+          go build -o openlist-windows-arm64.exe -ldflags=$ldflags -tags=jsoniter .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openlist-windows-arm64
+          path: openlist-windows-arm64.exe
+          retention-days: 1
+
   # 创建发布
   release:
-    needs: [build-windows-amd64, build-linux-amd64, build-linux-arm64, build-darwin-amd64, build-darwin-arm64, build-android-amd64, build-android-arm64]
+    needs: [build-windows-amd64, build-windows-arm64, build-linux-amd64, build-linux-arm64, build-linux-386, build-darwin-amd64, build-darwin-arm64, build-android-amd64, build-android-arm64]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
 
@@ -406,13 +391,20 @@ jobs:
         with:
           path: artifacts
 
-      - name: Package Windows
+      - name: Package Windows amd64
         run: |
           cd artifacts
           mkdir release
           cp openlist-windows-amd64/openlist-windows-amd64.exe release/openlist.exe
           cd release
           zip openlist-windows-amd64.zip openlist.exe
+
+      - name: Package Windows arm64
+        run: |
+          cd artifacts
+          cp openlist-windows-arm64/openlist-windows-arm64.exe release/
+          cd release
+          zip openlist-windows-arm64.zip openlist-windows-arm64.exe
 
       - name: Package Linux amd64
         run: |
@@ -425,6 +417,12 @@ jobs:
           cd artifacts
           cd openlist-linux-arm64
           tar -czvf ../release/openlist-linux-arm64.tar.gz openlist-linux-arm64
+
+      - name: Package Linux 386
+        run: |
+          cd artifacts
+          cd openlist-linux-386
+          tar -czvf ../release/openlist-linux-386.tar.gz openlist-linux-386
 
       - name: Package macOS amd64
         run: |

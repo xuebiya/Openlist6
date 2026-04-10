@@ -1,0 +1,1 @@
+System.register(["./index-legacy-DOAncaiW.js"],function(e,t){"use strict";var n,r,c,u,i,a;return{setters:[e=>{n=e.e2,r=e.E,c=e.ai,u=e.c_,i=e.V,a=e.ah}],execute:function(){e("default",()=>{const[e]=n();return r(a,{get loading(){return e.loading},get children(){return r(c,{get children(){return e()?.content},get ext(){return u(i.obj.name)},toc:!0})}})})}}});

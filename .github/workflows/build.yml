@@ -31,20 +31,46 @@ jobs:
         run: go mod download
 
       - name: Build Windows amd64
-        env:
-          GOOS: windows
-          GOARCH: amd64
-          CGO_ENABLED: 1
         run: |
           $version = if ($env:GITHUB_REF -match 'v[\d]+\.[\d]+\.[\d]+') { $matches[0] } else { "v0.0.0" }
-          $ldflags = "-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=$version' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'"
-          go build -o openlist-windows-amd64.exe -ldflags=$ldflags -tags=jsoniter .
+          Write-Host "Building version: $version"
+          go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=$version' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" -tags=jsoniter -o openlist-windows-amd64.exe .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: openlist-windows-amd64
           path: openlist-windows-amd64.exe
+          retention-days: 1
+
+  # 构建 Windows arm64
+  build-windows-arm64:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Get dependencies
+        run: go mod download
+
+      - name: Build Windows arm64
+        run: |
+          $version = if ($env:GITHUB_REF -match 'v[\d]+\.[\d]+\.[\d]+') { $matches[0] } else { "v0.0.0" }
+          Write-Host "Building version: $version"
+          go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=$version' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" -tags=jsoniter -o openlist-windows-arm64.exe .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openlist-windows-arm64
+          path: openlist-windows-arm64.exe
           retention-days: 1
 
   # 构建 Linux amd64 (静态编译)
@@ -70,18 +96,13 @@ jobs:
         run: go mod download
 
       - name: Build Linux amd64 (musl)
-        env:
-          GOOS: linux
-          GOARCH: amd64
-          CGO_ENABLED: 1
-          CC: musl-gcc
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
           if ! [[ $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
             VERSION="v0.0.0"
           fi
-          ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'"
-          go build -o openlist-linux-amd64 -ldflags="$ldflags" -tags=jsoniter .
+          echo "Building version: $VERSION"
+          go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" -tags=jsoniter -o openlist-linux-amd64 .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -119,18 +140,13 @@ jobs:
         run: go mod download
 
       - name: Build Linux arm64
-        env:
-          GOOS: linux
-          GOARCH: arm64
-          CGO_ENABLED: 1
-          CC: aarch64-linux-gnu-gcc
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
           if ! [[ $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
             VERSION="v0.0.0"
           fi
-          ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'"
-          go build -o openlist-linux-arm64 -ldflags="$ldflags" -tags=jsoniter .
+          echo "Building version: $VERSION"
+          go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" -tags=jsoniter -o openlist-linux-arm64 .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -157,18 +173,13 @@ jobs:
         run: go mod download
 
       - name: Build Linux 386
-        env:
-          GOOS: linux
-          GOARCH: 386
-          CGO_ENABLED: 1
-          CC: gcc
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
           if ! [[ $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
             VERSION="v0.0.0"
           fi
-          ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'"
-          go build -o openlist-linux-386 -ldflags="$ldflags" -tags=jsoniter .
+          echo "Building version: $VERSION"
+          go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" -tags=jsoniter -o openlist-linux-386 .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -195,17 +206,13 @@ jobs:
         run: go mod download
 
       - name: Build macOS amd64
-        env:
-          GOOS: darwin
-          GOARCH: amd64
-          CGO_ENABLED: 1
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
           if ! [[ $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
             VERSION="v0.0.0"
           fi
-          ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'"
-          go build -o openlist-darwin-amd64 -ldflags="$ldflags" -tags=jsoniter .
+          echo "Building version: $VERSION"
+          go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" -tags=jsoniter -o openlist-darwin-amd64 .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -232,17 +239,13 @@ jobs:
         run: go mod download
 
       - name: Build macOS arm64
-        env:
-          GOOS: darwin
-          GOARCH: arm64
-          CGO_ENABLED: 1
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
           if ! [[ $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
             VERSION="v0.0.0"
           fi
-          ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'"
-          go build -o openlist-darwin-arm64 -ldflags="$ldflags" -tags=jsoniter .
+          echo "Building version: $VERSION"
+          go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" -tags=jsoniter -o openlist-darwin-arm64 .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -274,22 +277,16 @@ jobs:
         run: go mod download
 
       - name: Build Android amd64
-        env:
-          GOOS: android
-          GOARCH: amd64
-          CGO_ENABLED: 1
-          CC: $ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang
-          CXX: $ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang++
-          CGO_CFLAGS: --target=x86_64-linux-android24 --sysroot=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot
-          CGO_CXXFLAGS: --target=x86_64-linux-android24 --sysroot=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot
-          CGO_LDFLAGS: -target x86_64-linux-android24
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
           if ! [[ $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
             VERSION="v0.0.0"
           fi
-          ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'"
-          go build -o openlist-android-amd64 -ldflags="$ldflags" -tags=jsoniter .
+          echo "Building version: $VERSION"
+          CGO_CFLAGS="--target=x86_64-linux-android24 --sysroot=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot" \
+          CGO_CXXFLAGS="--target=x86_64-linux-android24 --sysroot=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot" \
+          go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" \
+            -tags=jsoniter -o openlist-android-amd64 .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -321,62 +318,22 @@ jobs:
         run: go mod download
 
       - name: Build Android arm64
-        env:
-          GOOS: android
-          GOARCH: arm64
-          CGO_ENABLED: 1
-          CC: $ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
-          CXX: $ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang++
-          CGO_CFLAGS: --target=aarch64-linux-android24 --sysroot=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot
-          CGO_CXXFLAGS: --target=aarch64-linux-android24 --sysroot=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot
-          CGO_LDFLAGS: -target aarch64-linux-android24
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
           if ! [[ $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
             VERSION="v0.0.0"
           fi
-          ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'"
-          go build -o openlist-android-arm64 -ldflags="$ldflags" -tags=jsoniter .
+          echo "Building version: $VERSION"
+          CGO_CFLAGS="--target=aarch64-linux-android24 --sysroot=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot" \
+          CGO_CXXFLAGS="--target=aarch64-linux-android24 --sysroot=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot" \
+          go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" \
+            -tags=jsoniter -o openlist-android-arm64 .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: openlist-android-arm64
           path: openlist-android-arm64
-          retention-days: 1
-
-  # 构建 Windows arm64
-  build-windows-arm64:
-    runs-on: windows-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: Get dependencies
-        run: go mod download
-
-      - name: Build Windows arm64
-        env:
-          GOOS: windows
-          GOARCH: arm64
-          CGO_ENABLED: 1
-        run: |
-          $version = if ($env:GITHUB_REF -match 'v[\d]+\.[\d]+\.[\d]+') { $matches[0] } else { "v0.0.0" }
-          $ldflags = "-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=$version' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'"
-          go build -o openlist-windows-arm64.exe -ldflags=$ldflags -tags=jsoniter .
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: openlist-windows-arm64
-          path: openlist-windows-arm64.exe
           retention-days: 1
 
   # 创建发布

@@ -4,38 +4,78 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - main
   workflow_dispatch:
 
+env:
+  NODE_VERSION: '20'
+  GO_VERSION: '1.23'
+  FRONTEND_DIR: frontend
+
 jobs:
-  build-windows:
+  # 构建前端
+  build-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          cache-dependency-path: ${{ env.FRONTEND_DIR }}/pnpm-lock.yaml
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install frontend dependencies
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: pnpm install
+
+      - name: Build frontend
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: pnpm run build
+
+      - name: Copy frontend to backend
+        run: |
+          rm -rf public/dist
+          cp -r ${{ env.FRONTEND_DIR }}/dist public/
+
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: public/dist
+          retention-days: 1
+
+  # 构建 Windows amd64
+  build-windows-amd64:
+    needs: build-frontend
     runs-on: windows-latest
-    env:
-      SKIP_WEB: "true"
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Download frontend
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: public/dist
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
-
-      - name: Verify local frontend exists
-        run: |
-          if (Test-Path "public/dist/index.html") {
-            Write-Host "Local frontend files found in public/dist"
-            Get-Content "public/dist/index.html" | Select-Object -First 5
-          } else {
-            Write-Host "ERROR: public/dist/index.html not found!"
-            exit 1
-          }
+          go-version: ${{ env.GO_VERSION }}
 
       - name: Get dependencies
         run: go mod download
 
-      - name: Build Windows exe
+      - name: Build Windows amd64
         env:
           GOOS: windows
           GOARCH: amd64
@@ -43,51 +83,45 @@ jobs:
         run: |
           $version = if ($env:GITHUB_REF -match 'v[\d]+\.[\d]+\.[\d]+') { $matches[0] } else { "v0.0.0" }
           $ldflags = "-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=$version' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'"
-          Write-Host "Building with version: $version"
-          Write-Host "Using local frontend files (SKIP_WEB=$env:SKIP_WEB)"
-          go build -o openlist-amd64.exe -ldflags=$ldflags -tags=jsoniter .
+          go build -o openlist-windows-amd64.exe -ldflags=$ldflags -tags=jsoniter .
 
-      - name: Upload Windows artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: openlist-windows-amd64
-          path: openlist-amd64.exe
-          retention-days: 5
+          path: openlist-windows-amd64.exe
+          retention-days: 1
 
-  build-linux:
+  # 构建 Linux amd64 (静态编译)
+  build-linux-amd64:
+    needs: build-frontend
     runs-on: ubuntu-latest
-    env:
-      SKIP_WEB: "true"
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Download frontend
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: public/dist
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
-
-      - name: Verify local frontend exists
-        run: |
-          if [ -f "public/dist/index.html" ]; then
-            echo "Local frontend files found in public/dist"
-            head -5 public/dist/index.html
-          else
-            echo "ERROR: public/dist/index.html not found!"
-            exit 1
-          fi
-
-      - name: Get dependencies
-        run: go mod download
+          go-version: ${{ env.GO_VERSION }}
 
       - name: Install musl-cross
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools
 
-      - name: Build Linux amd64
+      - name: Get dependencies
+        run: go mod download
+
+      - name: Build Linux amd64 (musl)
         env:
           GOOS: linux
           GOARCH: amd64
@@ -98,52 +132,341 @@ jobs:
           if ! [[ $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
             VERSION="v0.0.0"
           fi
-          echo "Building with version: $VERSION"
-          echo "Using local frontend files (SKIP_WEB=$SKIP_WEB)"
           ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'"
-          go build -o openlist-amd64 -ldflags="$ldflags" -tags=jsoniter .
+          go build -o openlist-linux-amd64 -ldflags="$ldflags" -tags=jsoniter .
 
-      - name: Upload Linux artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: openlist-linux-amd64
-          path: openlist-amd64
-          retention-days: 5
+          path: openlist-linux-amd64
+          retention-days: 1
 
+  # 构建 Linux arm64 (musl)
+  build-linux-arm64:
+    needs: build-frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download frontend
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: public/dist
+
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          image: multiarch/qemu-user-static:latest
+          platforms: arm64
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install cross compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Get dependencies
+        run: go mod download
+
+      - name: Build Linux arm64
+        env:
+          GOOS: linux
+          GOARCH: arm64
+          CGO_ENABLED: 1
+          CC: aarch64-linux-gnu-gcc
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          if ! [[ $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            VERSION="v0.0.0"
+          fi
+          ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'"
+          go build -o openlist-linux-arm64 -ldflags="$ldflags" -tags=jsoniter .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openlist-linux-arm64
+          path: openlist-linux-arm64
+          retention-days: 1
+
+  # 构建 macOS amd64
+  build-darwin-amd64:
+    needs: build-frontend
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download frontend
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: public/dist
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Get dependencies
+        run: go mod download
+
+      - name: Build macOS amd64
+        env:
+          GOOS: darwin
+          GOARCH: amd64
+          CGO_ENABLED: 1
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          if ! [[ $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            VERSION="v0.0.0"
+          fi
+          ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'"
+          go build -o openlist-darwin-amd64 -ldflags="$ldflags" -tags=jsoniter .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openlist-darwin-amd64
+          path: openlist-darwin-amd64
+          retention-days: 1
+
+  # 构建 macOS arm64 (Apple Silicon)
+  build-darwin-arm64:
+    needs: build-frontend
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download frontend
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: public/dist
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Get dependencies
+        run: go mod download
+
+      - name: Build macOS arm64
+        env:
+          GOOS: darwin
+          GOARCH: arm64
+          CGO_ENABLED: 1
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          if ! [[ $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            VERSION="v0.0.0"
+          fi
+          ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'"
+          go build -o openlist-darwin-arm64 -ldflags="$ldflags" -tags=jsoniter .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openlist-darwin-arm64
+          path: openlist-darwin-arm64
+          retention-days: 1
+
+  # 构建 Android amd64
+  build-android-amd64:
+    needs: build-frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download frontend
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: public/dist
+
+      - name: Setup Android NDK
+        uses: android/actions-setup-java@v2
+        with:
+          ndk-version: r26b
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Get dependencies
+        run: go mod download
+
+      - name: Build Android amd64
+        env:
+          GOOS: android
+          GOARCH: amd64
+          CGO_ENABLED: 1
+          CC: $ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang
+          CXX: $ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang++
+          CGO_CFLAGS: --target=x86_64-linux-android24 --sysroot=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot
+          CGO_CXXFLAGS: --target=x86_64-linux-android24 --sysroot=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot
+          CGO_LDFLAGS: -target x86_64-linux-android24
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          if ! [[ $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            VERSION="v0.0.0"
+          fi
+          ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'"
+          go build -o openlist-android-amd64 -ldflags="$ldflags" -tags=jsoniter .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openlist-android-amd64
+          path: openlist-android-amd64
+          retention-days: 1
+
+  # 构建 Android arm64
+  build-android-arm64:
+    needs: build-frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download frontend
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: public/dist
+
+      - name: Setup Android NDK
+        uses: android/actions-setup-java@v2
+        with:
+          ndk-version: r26b
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Get dependencies
+        run: go mod download
+
+      - name: Build Android arm64
+        env:
+          GOOS: android
+          GOARCH: arm64
+          CGO_ENABLED: 1
+          CC: $ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
+          CXX: $ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang++
+          CGO_CFLAGS: --target=aarch64-linux-android24 --sysroot=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot
+          CGO_CXXFLAGS: --target=aarch64-linux-android24 --sysroot=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot
+          CGO_LDFLAGS: -target aarch64-linux-android24
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          if ! [[ $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            VERSION="v0.0.0"
+          fi
+          ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'"
+          go build -o openlist-android-arm64 -ldflags="$ldflags" -tags=jsoniter .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openlist-android-arm64
+          path: openlist-android-arm64
+          retention-days: 1
+
+  # 创建发布
   release:
-    needs: [build-windows, build-linux]
+    needs: [build-windows-amd64, build-linux-amd64, build-linux-arm64, build-darwin-amd64, build-darwin-arm64, build-android-amd64, build-android-arm64]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
 
     steps:
-      - name: Download Windows artifact
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          name: openlist-windows-amd64
           path: artifacts
 
-      - name: Download Linux artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: openlist-linux-amd64
-          path: artifacts
-
-      - name: Create zip for Windows
+      - name: Package Windows
         run: |
           cd artifacts
-          cp openlist-windows-amd64 openlist.exe
+          mkdir release
+          cp openlist-windows-amd64/openlist-windows-amd64.exe release/openlist.exe
+          cd release
           zip openlist-windows-amd64.zip openlist.exe
 
-      - name: Create tar.gz for Linux
+      - name: Package Linux amd64
         run: |
           cd artifacts
-          tar -czvf openlist-linux-amd64.tar.gz openlist-amd64
+          cd openlist-linux-amd64
+          tar -czvf ../release/openlist-linux-amd64.tar.gz openlist-linux-amd64
+
+      - name: Package Linux arm64
+        run: |
+          cd artifacts
+          cd openlist-linux-arm64
+          tar -czvf ../release/openlist-linux-arm64.tar.gz openlist-linux-arm64
+
+      - name: Package macOS amd64
+        run: |
+          cd artifacts
+          cd openlist-darwin-amd64
+          tar -czvf ../release/openlist-darwin-amd64.tar.gz openlist-darwin-amd64
+
+      - name: Package macOS arm64
+        run: |
+          cd artifacts
+          cd openlist-darwin-arm64
+          tar -czvf ../release/openlist-darwin-arm64.tar.gz openlist-darwin-arm64
+
+      - name: Package Android amd64
+        run: |
+          cd artifacts
+          cd openlist-android-amd64
+          tar -czvf ../release/openlist-android-amd64.tar.gz openlist-android-amd64
+
+      - name: Package Android arm64
+        run: |
+          cd artifacts
+          cd openlist-android-arm64
+          tar -czvf ../release/openlist-android-arm64.tar.gz openlist-android-arm64
+
+      - name: Generate checksums
+        run: |
+          cd artifacts/release
+          md5sum * > md5.txt
+          sha256sum * > sha256.txt
+          cat md5.txt
+          echo "---"
+          cat sha256.txt
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/openlist-windows-amd64.zip
-            artifacts/openlist-linux-amd64.tar.gz
+            artifacts/release/*.zip
+            artifacts/release/*.tar.gz
+            artifacts/release/md5.txt
+            artifacts/release/sha256.txt
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

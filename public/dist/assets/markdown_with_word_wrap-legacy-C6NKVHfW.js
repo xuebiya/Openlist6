@@ -1,1 +1,0 @@
-System.register(["./index-legacy-DMXu1sDU.js"],function(e,t){"use strict";var r,n,c,u,a,i;return{setters:[e=>{r=e.e2,n=e.E,c=e.ai,u=e.c_,a=e.V,i=e.ah}],execute:function(){e("default",()=>{const[e]=r();return n(i,{get loading(){return e.loading},get children(){return n(c,{class:"word-wrap",get children(){return e()?.content},get ext(){return u(a.obj.name)},toc:!0})}})})}}});

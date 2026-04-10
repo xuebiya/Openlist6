@@ -1,38 +1,36 @@
-.idea/
-.DS_Store
-output/
-/dist/
-
-# Binaries for programs and plugins
+# Binaries
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
-*.db
-*.bin
-
-# Test binary, built with `go test -c`
 *.test
-
-# Output of the go coverage tool, specifically when used with LiteIDE
 *.out
+openlist
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
-/bin/*
-*.json
-/build
-/data/
-/tmp/
-/log/
-/lang/
-/daemon/
-# Keep frontend files in public/dist
-!/public/dist/
+# Go workspace
+go.work
 
-.VSCodeCounter
+# Build output
+bin/
+build/
 
-# Build artifacts
-openlist-linux-amd64
-openlist.exe
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.pnpm-store/

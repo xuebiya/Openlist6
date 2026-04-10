@@ -90,7 +90,7 @@ jobs:
       - name: Install musl tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y musl musl-tools
+          sudo apt-get install -y musl-tools
 
       - name: Get dependencies
         run: go mod download
@@ -128,7 +128,7 @@ jobs:
       - name: Install cross compiler
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
+          sudo apt-get install -y gcc-arm-linux-gnueabihf
 
       - name: Get dependencies
         run: go mod download
@@ -140,7 +140,7 @@ jobs:
             VERSION="v0.0.0"
           fi
           echo "Building version: $VERSION"
-          CGO_ENABLED=1 CC=aarch64-linux-gnu-gcc go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" -tags=jsoniter -o openlist-linux-arm64 .
+          CGO_ENABLED=1 CC=arm-linux-gnueabihf-gcc go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" -tags=jsoniter -o openlist-linux-arm64 .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -184,7 +184,7 @@ jobs:
 
   # 构建 macOS amd64
   build-darwin-amd64:
-    runs-on: macos-latest
+    runs-on: macos-13
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -248,115 +248,9 @@ jobs:
           path: openlist-darwin-arm64
           retention-days: 1
 
-  # 构建 Android amd64
-  build-android-amd64:
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y wget unzip
-
-      - name: Setup Android NDK
-        run: |
-          cd /tmp
-          wget -q https://dl.google.com/android/repository/android-ndk-r26b-linux.zip -O android-ndk.zip
-          unzip -q android-ndk.zip
-          echo "ANDROID_NDK=/tmp/android-ndk-r26b" >> $GITHUB_ENV
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: Get dependencies
-        run: go mod download
-
-      - name: Build Android amd64
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/}
-          if ! [[ $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-            VERSION="v0.0.0"
-          fi
-          echo "Building version: $VERSION"
-          export ANDROID_NDK=/tmp/android-ndk-r26b
-          export PATH="$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
-          export CC=x86_64-linux-android24-clang
-          export CXX=x86_64-linux-android24-clang++
-          export CGO_ENABLED=1
-          export CGO_CFLAGS="--target=x86_64-linux-android24 --sysroot=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
-          export CGO_CXXFLAGS="--target=x86_64-linux-android24 --sysroot=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
-          export CGO_LDFLAGS="-target x86_64-linux-android24"
-          go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" -tags=jsoniter -o openlist-android-amd64 .
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: openlist-android-amd64
-          path: openlist-android-amd64
-          retention-days: 1
-
-  # 构建 Android arm64
-  build-android-arm64:
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y wget unzip
-
-      - name: Setup Android NDK
-        run: |
-          cd /tmp
-          wget -q https://dl.google.com/android/repository/android-ndk-r26b-linux.zip -O android-ndk.zip
-          unzip -q android-ndk.zip
-          echo "ANDROID_NDK=/tmp/android-ndk-r26b" >> $GITHUB_ENV
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: Get dependencies
-        run: go mod download
-
-      - name: Build Android arm64
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/}
-          if ! [[ $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-            VERSION="v0.0.0"
-          fi
-          echo "Building version: $VERSION"
-          export ANDROID_NDK=/tmp/android-ndk-r26b
-          export PATH="$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
-          export CC=aarch64-linux-android24-clang
-          export CXX=aarch64-linux-android24-clang++
-          export CGO_ENABLED=1
-          export CGO_CFLAGS="--target=aarch64-linux-android24 --sysroot=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
-          export CGO_CXXFLAGS="--target=aarch64-linux-android24 --sysroot=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
-          export CGO_LDFLAGS="-target aarch64-linux-android24"
-          go build -ldflags="-w -s -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${VERSION}' -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=local'" -tags=jsoniter -o openlist-android-arm64 .
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: openlist-android-arm64
-          path: openlist-android-arm64
-          retention-days: 1
-
   # 创建发布
   release:
-    needs: [build-windows-amd64, build-windows-arm64, build-linux-amd64, build-linux-arm64, build-linux-386, build-darwin-amd64, build-darwin-arm64, build-android-amd64, build-android-arm64]
+    needs: [build-windows-amd64, build-windows-arm64, build-linux-amd64, build-linux-arm64, build-linux-386, build-darwin-amd64, build-darwin-arm64]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
 
@@ -410,18 +304,6 @@ jobs:
           cd artifacts
           cd openlist-darwin-arm64
           tar -czvf ../release/openlist-darwin-arm64.tar.gz openlist-darwin-arm64
-
-      - name: Package Android amd64
-        run: |
-          cd artifacts
-          cd openlist-android-amd64
-          tar -czvf ../release/openlist-android-amd64.tar.gz openlist-android-amd64
-
-      - name: Package Android arm64
-        run: |
-          cd artifacts
-          cd openlist-android-arm64
-          tar -czvf ../release/openlist-android-arm64.tar.gz openlist-android-arm64
 
       - name: Generate checksums
         run: |

@@ -1,1 +1,0 @@
-System.register(["./index-legacy-BG_13nnE.js"],function(e,t){"use strict";var r,n,c,u,a,s;return{setters:[e=>{r=e.e0,n=e.C,c=e.ae,u=e.cY,a=e.R,s=e.ad}],execute:function(){e("default",()=>{const[e]=r();return n(s,{get loading(){return e.loading},get children(){return n(c,{class:"word-wrap",get children(){return e()?.content},get ext(){return u(a.obj.name)},toc:!0})}})})}}});
